@@ -1,52 +1,52 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-contract UserAccount {
-    struct User {
-        string username;
-        bytes32 passwordHash;
+contract voting {
+    uint public valid_vote = 1;
+    uint public totalVotes;
+    uint public votesForPartyA;
+    uint public votesForPartyB;
+    address party;
+
+    constructor() {
+        party = msg.sender;
     }
 
-    mapping(address => User) private users;
-
-    event UsernameChanged(address indexed user, string newUsername);
-
-    modifier userExists(address _user) {
-        require(users[_user].passwordHash != 0, "User does not exist");
-        _;
+    function setTotalVotes(uint votes) public {
+        require(party == msg.sender, "Party owner can't interfere");
+        require(votes > 0, "Invalid votes");
+        totalVotes = votes;
     }
 
-    function setUsername(string memory _username, string memory _password) public {
-        require(bytes(_username).length > 0, "Username cannot be empty");
-        require(bytes(_password).length > 0, "Password cannot be empty");
-
-        bytes32 passwordHash = keccak256(abi.encodePacked(_password));
-        users[msg.sender] = User(_username, passwordHash);
-
-        // Ensure the user data is set correctly
-        assert(users[msg.sender].passwordHash == passwordHash);
+    function voteForPartyA(uint votes) public {
+        require(totalVotes > 0, "Total votes not set");
+        require(votes > 0, "Votes must be greater than 0");
+        require(votesForPartyA + votes <= totalVotes, "Total votes for Party A exceed total votes");
+        votesForPartyA += votes * valid_vote;
     }
 
-    function changeUsername(string memory _newUsername, string memory _password) public userExists(msg.sender) {
-        require(bytes(_newUsername).length > 0, "New username cannot be empty");
-        require(bytes(_password).length > 0, "Password cannot be empty");
+    function voteForPartyB(uint votes) public {
+        require(totalVotes > 0, "Total votes not set");
+        require(votes > 0, "Votes must be greater than 0");
+        require(votesForPartyB + votes <= totalVotes - votesForPartyA, "Total votes for Party B exceed remaining votes");
+        votesForPartyB += votes * valid_vote;
+    }
 
-        User storage user = users[msg.sender];
-        bytes32 passwordHash = keccak256(abi.encodePacked(_password));
+    function party_A() public view returns (uint) {
+        return votesForPartyA;
+    }
 
-        if (user.passwordHash != passwordHash) {
-            revert("Incorrect password");
+    function party_B() public view returns (uint) {
+        return votesForPartyB;
+    }
+
+    function winning_party() public view returns (string memory) {
+        if (votesForPartyA > votesForPartyB) {
+            return "Party A";
+        } else if (votesForPartyB > votesForPartyA) {
+            return "Party B";
+        } else {
+            return "It's a tie";
         }
-
-        user.username = _newUsername;
-
-        // Ensure the username was changed correctly
-        assert(keccak256(abi.encodePacked(user.username)) == keccak256(abi.encodePacked(_newUsername)));
-
-        emit UsernameChanged(msg.sender, _newUsername);
-    }
-
-    function getUsername(address _user) public view userExists(_user) returns (string memory) {
-        return users[_user].username;
     }
 }
