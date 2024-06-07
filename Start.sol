@@ -1,52 +1,67 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-contract voting {
-    uint public valid_vote = 1;
-    uint public totalVotes;
-    uint public votesForPartyA;
-    uint public votesForPartyB;
-    address party;
+contract ElectricityBilling {
+    address public owner;
+    uint public freeUnits = 200;
+    uint public ratePerUnit;
 
-    constructor() {
-        party = msg.sender;
+    mapping(address => uint) public usage;
+    mapping(address => uint) public bills;
+
+    event BillPaid(address indexed user, uint amount);
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Only the owner can perform this action");
+        _;
     }
 
-    function setTotalVotes(uint votes) public {
-        require(party == msg.sender, "Party owner can't interfere");
-        require(votes > 0, "Invalid votes");
-        totalVotes = votes;
+    constructor(uint _ratePerUnit) {
+        require(_ratePerUnit > 0, "Rate per unit must be greater than zero");
+        owner = msg.sender;
+        ratePerUnit = _ratePerUnit;
     }
 
-    function voteForPartyA(uint votes) public {
-        require(totalVotes > 0, "Total votes not set");
-        require(votes > 0, "Votes must be greater than 0");
-        require(votesForPartyA + votes <= totalVotes, "Total votes for Party A exceed total votes");
-        votesForPartyA += votes * valid_vote;
+    function recordUsage(address user, uint units) external onlyOwner {
+        require(units > 0, "Usage must be greater than zero");
+
+        usage[user] += units;
     }
 
-    function voteForPartyB(uint votes) public {
-        require(totalVotes > 0, "Total votes not set");
-        require(votes > 0, "Votes must be greater than 0");
-        require(votesForPartyB + votes <= totalVotes - votesForPartyA, "Total votes for Party B exceed remaining votes");
-        votesForPartyB += votes * valid_vote;
-    }
+    function calculateBill(address user) external onlyOwner returns (uint) {
+        uint totalUnits = usage[user];
+        require(totalUnits > 0, "No usage recorded for this user");
 
-    function party_A() public view returns (uint) {
-        return votesForPartyA;
-    }
-
-    function party_B() public view returns (uint) {
-        return votesForPartyB;
-    }
-
-    function winning_party() public view returns (string memory) {
-        if (votesForPartyA > votesForPartyB) {
-            return "Party A";
-        } else if (votesForPartyB > votesForPartyA) {
-            return "Party B";
+        if (totalUnits <= freeUnits) {
+            bills[user] = 0;
         } else {
-            return "It's a tie";
+            uint chargeableUnits = totalUnits - freeUnits;
+            bills[user] = chargeableUnits * ratePerUnit;
         }
+
+        assert(bills[user] >= 0); 
+        return bills[user];
+    }
+
+    function payBill() external payable {
+        uint billAmount = bills[msg.sender];
+        require(billAmount > 0, "No bill due");
+        require(msg.value == billAmount, "Incorrect bill amount");
+
+        bills[msg.sender] = 0;
+        emit BillPaid(msg.sender, msg.value);
+    }
+
+    function withdraw() external onlyOwner {
+        uint balance = address(this).balance;
+        require(balance > 0, "No funds available for withdrawal");
+        payable(owner).transfer(balance);
+    }
+
+    function setRatePerUnit(uint _ratePerUnit) external onlyOwner {
+        if (_ratePerUnit <= 0) {
+            revert("New rate per unit must be greater than zero");
+        }
+        ratePerUnit = _ratePerUnit;
     }
 }
